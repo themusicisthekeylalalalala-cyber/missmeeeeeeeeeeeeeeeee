@@ -1,0 +1,2014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Magnifying Scope - Sniper Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'SamsungOne', 'SamsungOneUI', 'Samsung Sans', sans-serif;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            cursor: default;
+        }
+
+        @font-face {
+            font-family: 'SamsungOne';
+            src: local('SamsungOne'), local('SamsungOneUI'), local('Samsung Sans');
+        }
+
+        .inventory {
+            position: fixed;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #e8e8e8;
+            padding: 15px;
+            border: 1px solid #aaa;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            z-index: 1000;
+            width: 120px;
+        }
+
+        .inventory-title {
+            font-family: 'SamsungOne', monospace;
+            font-size: 13px;
+            font-weight: bold;
+            color: #222;
+            padding-bottom: 6px;
+        }
+
+        .inventory-slot {
+            width: 90px;
+            height: 90px;
+            background: white;
+            border: 1px solid #888;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .inventory-slot:hover { background: #f0f0f0; }
+
+        .inventory-slot.pulse {
+            animation: slotPulse 0.5s ease-in-out infinite;
+        }
+
+        @keyframes slotPulse {
+            0%, 100% { background: white; border-color: #888; }
+            50% { background: #ff8888; border-color: #ff0000; box-shadow: 0 0 10px rgba(255,68,68,0.3); }
+        }
+
+        .inventory-slot img { width: 70px; height: 70px; object-fit: contain; }
+        .slot-label {
+            font-family: 'SamsungOne', monospace;
+            font-size: 9px;
+            margin-top: 4px;
+            color: #333;
+        }
+
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+        }
+        canvas {
+            display: block;
+            width: 900px;
+            height: 600px;
+            cursor: crosshair;
+        }
+
+        .target-message {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: #1a1a1a;
+            color: #ff4444;
+            padding: 6px 12px;
+            font-family: 'SamsungOne', monospace;
+            font-size: 13px;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 200;
+            transition: all 0.5s ease-out;
+            white-space: nowrap;
+        }
+
+        .target-message.growing {
+            background: rgba(0,0,0,0.9);
+            transition: all 2s ease-out;
+        }
+
+        .magnifier {
+            position: fixed;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: 2px solid #222;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.5);
+            pointer-events: none;
+            z-index: 10000;
+            display: none;
+            overflow: hidden;
+            background: #111;
+        }
+        .magnifier-canvas { width: 100%; height: 100%; display: block; }
+        .magnifier .crosshair-line-h, .magnifier .crosshair-line-v {
+            position: absolute;
+            background: #222;
+        }
+        .magnifier .crosshair-line-h { top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); }
+        .magnifier .crosshair-line-v { left: 50%; top: 0; bottom: 0; width: 1px; transform: translateX(-50%); }
+        .magnifier .crosshair-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 12px;
+            height: 12px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 4;
+        }
+        .magnifier .crosshair-center::before,
+        .magnifier .crosshair-center::after {
+            content: "";
+            position: absolute;
+            background: white;
+        }
+        .magnifier .crosshair-center::before {
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            transform: translateY(-50%);
+        }
+        .magnifier .crosshair-center::after {
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            transform: translateX(-50%);
+        }
+
+        .zoom-level, .hit-counter {
+            position: fixed;
+            background: #1a1a1a;
+            padding: 6px 12px;
+            color: #ddd;
+            font-family: 'SamsungOne', monospace;
+            font-size: 11px;
+            border: 1px solid #555;
+            pointer-events: none;
+            z-index: 200;
+        }
+        .zoom-level { bottom: 20px; right: 20px; }
+        .hit-counter { top: 20px; right: 20px; color: #ff4444; font-weight: bold; }
+
+        .tooltip {
+            position: absolute;
+            background: #222;
+            color: #ddd;
+            padding: 4px 8px;
+            font-size: 10px;
+            font-family: 'SamsungOne', monospace;
+            pointer-events: none;
+            z-index: 1001;
+            white-space: nowrap;
+            border: 1px solid #555;
+        }
+
+        .sms-card {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 340px;
+            background: #f5f5f5;
+            border: 1px solid #ccc;
+            padding: 16px 20px;
+            font-family: 'SamsungOne', monospace;
+            z-index: 3000;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            cursor: grab;
+        }
+        .sms-card:active { cursor: grabbing; }
+        .sms-header {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            color: #555;
+            cursor: grab;
+        }
+        .sms-header:active { cursor: grabbing; }
+        .sms-sender { font-weight: bold; color: #0066cc; }
+        .sms-time { font-size: 10px; color: #888; }
+        .sms-body {
+            font-size: 18px;
+            font-weight: 500;
+            margin: 12px 0 20px 0;
+            color: #111;
+            text-align: center;
+        }
+        .sms-buttons {
+            display: flex;
+            gap: 25px;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            min-height: 60px;
+        }
+        .sms-btn {
+            font-family: 'SamsungOne', monospace;
+            background: #e0e0e0;
+            border: 1px solid #aaa;
+            padding: 6px 20px;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-yes {
+            font-size: 17px;
+            padding: 7px 28px;
+            background: #0077ff;
+            border-color: #0055aa;
+            color: white;
+        }
+        .btn-no {
+            font-size: 14px;
+            background: #eeeeee;
+        }
+        .btn-no:hover {
+            font-size: 17px;
+            padding: 7px 28px;
+            background: #0077ff;
+            border-color: #0055aa;
+            color: white;
+        }
+        body.sms-mode, body.sms-mode * { cursor: default !important; }
+
+        .black-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1.2s ease;
+        }
+        .black-screen.active { 
+            opacity: 1; 
+            pointer-events: all; 
+        }
+        .black-screen.no-transition {
+            transition: none;
+        }
+        
+        .game-world.blackout { 
+            opacity: 0; 
+            pointer-events: none; 
+        }
+        
+        .game-world {
+            position: relative;
+            transition: opacity 0.6s ease;
+        }
+        
+        .game-world.hidden {
+            display: none;
+        }
+
+        /* Visual Novel Overlay */
+        .vn-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            z-index: 20000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .vn-avatar {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 5;
+            pointer-events: none;
+        }
+        
+        .avatar-img {
+            max-width: 50%;
+            max-height: 60vh;
+            object-fit: contain;
+            filter: drop-shadow(0 0 20px rgba(0,0,0,0.3));
+        }
+        
+        .vn-text {
+            position: fixed;
+            bottom: 15%;
+            left: 0;
+            right: 0;
+            color: #e0e0e0;
+            font-family: 'SamsungOne', monospace;
+            font-size: 24px;
+            line-height: 1.5;
+            text-align: center;
+            max-width: 80%;
+            margin: 0 auto;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            z-index: 10;
+            pointer-events: none;
+            background: transparent;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .vn-image-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: black;
+            z-index: 20;
+            cursor: pointer;
+        }
+        
+        .vn-image {
+            max-width: 95vw;
+            max-height: 95vh;
+            object-fit: contain;
+            display: none;
+        }
+        
+        .vn-image.show { display: block; }
+        
+        .vn-nav {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+        
+        .vn-nav-btn {
+            background: rgba(0,0,0,0.3);
+            backdrop-filter: blur(4px);
+            border: none;
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            cursor: pointer;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+        }
+        
+        .bg-avatar {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 60%;
+            max-height: 60%;
+            object-fit: contain;
+            z-index: 15000;
+            opacity: 0;
+            transition: opacity 1s ease;
+            pointer-events: none;
+        }
+        
+        .bg-avatar.show { opacity: 1; }
+
+        /* Post-Sequence Buttons */
+        .post-buttons {
+            position: fixed;
+            bottom: 8%;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            z-index: 30000;
+            opacity: 0;
+            transition: opacity 1s ease;
+            pointer-events: none;
+            flex-wrap: wrap;
+            padding: 0 20px;
+        }
+        
+        .post-buttons.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .simple-btn {
+            background: black;
+            border: 1px solid #444;
+            color: white;
+            font-family: 'SamsungOne', monospace;
+            font-size: 13px;
+            padding: 8px 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            min-width: 90px;
+        }
+        
+        .simple-btn:hover {
+            background: #222;
+            border-color: #888;
+        }
+        
+        /* Speech bubble above avatar */
+        .speech-bubble {
+            position: fixed;
+            top: 18%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: black;
+            border: 1px solid #444;
+            padding: 8px 20px;
+            z-index: 30001;
+            opacity: 0;
+            transition: opacity 1s ease;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        
+        .speech-bubble.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .speech-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 10px solid black;
+        }
+        
+        .speech-bubble .simple-btn {
+            background: transparent;
+            border: none;
+            padding: 0;
+            font-size: 16px;
+            min-width: auto;
+        }
+        
+        .speech-bubble .simple-btn:hover {
+            background: transparent;
+            color: #aaa;
+        }
+        
+        /* Museum Overlay - No frame, no caption */
+        .museum-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: black;
+            z-index: 40000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .museum-img {
+            max-width: 90vw;
+            max-height: 90vh;
+            object-fit: contain;
+            display: block;
+        }
+        
+        /* Confetti Canvas */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 35000;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        /* Back to menu button during sport mode */
+        .back-menu-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: black;
+            border: 1px solid #444;
+            color: white;
+            font-family: 'SamsungOne', monospace;
+            font-size: 13px;
+            padding: 8px 14px;
+            cursor: pointer;
+            z-index: 30002;
+            display: none;
+            transition: all 0.2s;
+        }
+        
+        .back-menu-btn:hover {
+            background: #222;
+            border-color: #888;
+        }
+        
+        /* Explosion Game Styles */
+        .explosion-game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('https://www.infranews.ru/wp-content/uploads/2023/07/1920_aerialviewofvancouverport.jpg');
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            z-index: 50000;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .fireworks-btn {
+            background: linear-gradient(145deg, #C59B27 0%, #F5D76E 20%, #E8C345 50%, #F5D76E 80%, #C59B27 100%);
+            border: 1px solid #A67C1E;
+            color: white;
+            font-size: 2rem;
+            font-weight: bold;
+            padding: 24px 48px;
+            cursor: pointer;
+            font-family: 'SamsungOne', 'Samsung Sans', system-ui, 'Segoe UI', sans-serif;
+            letter-spacing: 2px;
+            text-shadow: 0px 1px 2px rgba(0,0,0,0.3);
+            border-radius: 0px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,245,200,0.6), inset 0 -1px 0 rgba(0,0,0,0.1);
+            transition: transform 0.08s linear, box-shadow 0.1s ease;
+            margin-bottom: 30px;
+        }
+        
+        .fireworks-btn:active {
+            transform: scale(0.96);
+            background: linear-gradient(145deg, #B8891F 0%, #E2BE4A 20%, #D4A830 50%, #E2BE4A 80%, #B8891F 100%);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,245,200,0.4);
+        }
+        
+        .fireworks-btn:hover {
+            background: linear-gradient(145deg, #D4A830 0%, #F8E08A 20%, #EDD066 50%, #F8E08A 80%, #D4A830 100%);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,250,210,0.8);
+            transform: scale(1.01);
+        }
+        
+        .chaos-explosion {
+            position: fixed;
+            z-index: 50001;
+            pointer-events: none;
+            animation: fadeOut 1.2s ease-out forwards;
+        }
+        
+        .chaos-explosion img {
+            width: auto;
+            height: auto;
+            max-width: 150px;
+            max-height: 150px;
+            pointer-events: none;
+            display: block;
+        }
+        
+        .chaos-explosion.large img {
+            max-width: 250px;
+            max-height: 250px;
+        }
+        
+        .chaos-explosion.tiny img {
+            max-width: 60px;
+            max-height: 60px;
+        }
+        
+        @keyframes fadeOut {
+            0% { opacity: 1; transform: scale(0.8); }
+            30% { transform: scale(1.2); }
+            100% { opacity: 0; transform: scale(1.5); display: none; }
+        }
+        
+        .shake {
+            animation: screenShake 0.15s ease-in-out 0s 2;
+        }
+        
+        @keyframes screenShake {
+            0% { transform: translate(0px, 0px); }
+            25% { transform: translate(3px, -2px); }
+            50% { transform: translate(-2px, 4px); }
+            75% { transform: translate(1px, -1px); }
+            100% { transform: translate(0px, 0px); }
+        }
+        
+        .explosion-counter {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: transparent;
+            color: white;
+            padding: 8px 12px;
+            font-family: 'SamsungOne', 'Samsung Sans', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            z-index: 50001;
+            pointer-events: none;
+            border: none;
+            text-shadow: 0px 0px 3px rgba(0,0,0,0.5);
+        }
+        
+        .explosion-back-btn {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            border: 1px solid #888;
+            color: white;
+            font-family: 'SamsungOne', monospace;
+            font-size: 16px;
+            padding: 12px 24px;
+            cursor: pointer;
+            z-index: 50002;
+            transition: all 0.2s;
+        }
+        
+        .explosion-back-btn:hover {
+            background: #222;
+            border-color: #aaa;
+        }
+        
+        /* Sport Mode Container */
+        .sport-mode-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            z-index: 45000;
+            display: none;
+        }
+        
+        .sport-canvas-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: inline-block;
+        }
+        
+        .sport-canvas {
+            display: block;
+            width: 900px;
+            height: 600px;
+            cursor: crosshair;
+        }
+        
+        .sport-hit-counter {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #1a1a1a;
+            padding: 6px 12px;
+            color: #ff4444;
+            font-family: 'SamsungOne', monospace;
+            font-size: 11px;
+            font-weight: bold;
+            border: 1px solid #555;
+            pointer-events: none;
+            z-index: 45001;
+        }
+        
+        .sport-zoom-level {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1a1a1a;
+            padding: 6px 12px;
+            color: #ddd;
+            font-family: 'SamsungOne', monospace;
+            font-size: 11px;
+            border: 1px solid #555;
+            pointer-events: none;
+            z-index: 45001;
+        }
+        
+        .sport-magnifier {
+            position: fixed;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: 2px solid #222;
+            box-shadow: 0 0 0 3px rgba(255,255,255,0.5);
+            pointer-events: none;
+            z-index: 45002;
+            display: none;
+            overflow: hidden;
+            background: #111;
+        }
+        
+        .sport-magnifier canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .sport-magnifier .crosshair-line-h,
+        .sport-magnifier .crosshair-line-v {
+            position: absolute;
+            background: #222;
+        }
+        .sport-magnifier .crosshair-line-h { top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%); }
+        .sport-magnifier .crosshair-line-v { left: 50%; top: 0; bottom: 0; width: 1px; transform: translateX(-50%); }
+        .sport-magnifier .crosshair-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 12px;
+            height: 12px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 4;
+        }
+        .sport-magnifier .crosshair-center::before,
+        .sport-magnifier .crosshair-center::after {
+            content: "";
+            position: absolute;
+            background: white;
+        }
+        .sport-magnifier .crosshair-center::before {
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            transform: translateY(-50%);
+        }
+        .sport-magnifier .crosshair-center::after {
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            transform: translateX(-50%);
+        }
+        
+        .sport-target-message {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: #1a1a1a;
+            color: #ff4444;
+            padding: 6px 12px;
+            font-family: 'SamsungOne', monospace;
+            font-size: 13px;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 45001;
+        }
+        
+        .sport-inventory {
+            position: fixed;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #e8e8e8;
+            padding: 15px;
+            border: 1px solid #aaa;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            z-index: 45003;
+            width: 120px;
+        }
+        
+        .sport-inventory-title {
+            font-family: 'SamsungOne', monospace;
+            font-size: 13px;
+            font-weight: bold;
+            color: #222;
+            padding-bottom: 6px;
+        }
+        
+        .sport-inventory-slot {
+            width: 90px;
+            height: 90px;
+            background: white;
+            border: 1px solid #888;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        
+        .sport-inventory-slot:hover { background: #f0f0f0; }
+        
+        .sport-inventory-slot img { width: 70px; height: 70px; object-fit: contain; }
+        .sport-slot-label {
+            font-family: 'SamsungOne', monospace;
+            font-size: 9px;
+            margin-top: 4px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Main Game World -->
+<div class="game-world" id="gameWorld">
+    <div class="inventory">
+        <div class="inventory-title">INVENTORY</div>
+        <div class="inventory-slot" id="phoneSlot">
+            <img id="phoneImg" src="https://s10.iimage.su/s/27/gW2SHD5xEsCJRzeePEv9MjGtd1C4LX32eDUT8uU8R.png" alt="Phone">
+            <div class="slot-label">Mobile Phone</div>
+        </div>
+        <div class="inventory-slot" id="rifleSlot">
+            <img id="rifleImg" src="https://s10.iimage.su/s/27/gDuuFXOxF9mwi01vDLyVjm778X6vCeDjVlv2zr3oz.png" alt="Rifle">
+            <div class="slot-label">Sniper Rifle</div>
+        </div>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="mainCanvas" width="900" height="600"></canvas>
+    </div>
+
+    <div id="magnifierLens" class="magnifier">
+        <canvas id="magnifierCanvas" width="200" height="200" class="magnifier-canvas"></canvas>
+        <div class="crosshair-line-h"></div>
+        <div class="crosshair-line-v"></div>
+        <div class="crosshair-center"></div>
+    </div>
+
+    <div class="zoom-level" id="zoomDisplay">10x</div>
+    <div class="hit-counter" id="hitCounter">HITS: 0 / 10</div>
+    <div class="target-message" id="targetMessage">KILL THE TARGET</div>
+</div>
+
+<div id="smsCard" class="sms-card">
+    <div class="sms-header">
+        <span class="sms-sender">Unknown Number</span>
+        <span class="sms-time" id="smsTimestamp">--:--</span>
+    </div>
+    <div class="sms-body">Miss me?</div>
+    <div class="sms-buttons" id="smsButtons">
+        <button class="sms-btn btn-yes" id="yesBtn">Yes</button>
+        <button class="sms-btn btn-no" id="noBtn">No</button>
+    </div>
+</div>
+
+<div id="blackOut" class="black-screen"></div>
+
+<!-- Avatar Images -->
+<img id="bgAvatar" class="bg-avatar" src="https://s10.iimage.su/s/31/gxMh4BFxfdZFvaTk4gIZNQ98NRm9st01a4DhyU8wL.png" alt="Avatar">
+<img id="mcqueenAvatar" class="hidden" src="https://s10.iimage.su/s/31/gZMEpz6xhXR4mTRr7swbfPuzkeoZ9AFKbpzsO1PGr.png" alt="McQueen">
+
+<div id="vnOverlay" class="vn-overlay">
+    <div class="vn-avatar" id="vnAvatar">
+        <svg class="avatar-img" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="100" cy="100" r="95" fill="#2a2a2e" stroke="#555" stroke-width="2"/>
+            <circle cx="100" cy="80" r="35" fill="#3a3a3e" stroke="#666" stroke-width="1.5"/>
+            <circle cx="85" cy="75" r="4" fill="#888"/>
+            <circle cx="115" cy="75" r="4" fill="#888"/>
+            <ellipse cx="100" cy="130" rx="45" ry="60" fill="#3a3a3e" stroke="#666" stroke-width="1.5"/>
+            <path d="M75 110 L125 110" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+    </div>
+    <div id="vnText" class="vn-text"></div>
+    <div id="vnImageContainer" class="vn-image-container">
+        <img id="vnImage1" class="vn-image" src="https://i.pinimg.com/736x/23/99/12/2399127a84ad940fd817df0e5ea5514f.jpg" alt="Drawing 1">
+        <img id="vnImage2" class="vn-image" src="https://i.pinimg.com/736x/4c/bb/00/4cbb003a78ae7b640fa44ee22dee987b.jpg" alt="Drawing 2">
+    </div>
+    <div class="vn-nav">
+        <button id="vnBackBtn" class="vn-nav-btn">◀</button>
+        <button id="vnNextBtn" class="vn-nav-btn">▶</button>
+    </div>
+</div>
+
+<!-- Speech Bubble above avatar -->
+<div id="speechBubble" class="speech-bubble">
+    <button id="birthdayBtn" class="simple-btn">HAPPY BIRTHDAY!</button>
+</div>
+
+<!-- Bottom Buttons -->
+<div class="post-buttons" id="postButtons">
+    <button id="image1Btn" class="simple-btn">DRAWING 01</button>
+    <button id="image2Btn" class="simple-btn">DRAWING 02</button>
+    <button id="mcqueenBtn" class="simple-btn">MCQUEEN MODE</button>
+    <button id="shootForSportBtn" class="simple-btn">SHOOT FOR SPORT</button>
+    <button id="fireworksMenuBtn" class="simple-btn">FIREWORKS</button>
+</div>
+
+<!-- Museum Overlay -->
+<div id="museumOverlay" class="museum-overlay">
+    <img id="museumImg" class="museum-img" src="" alt="Artwork">
+</div>
+
+<canvas id="confetti-canvas"></canvas>
+
+<!-- Sport Mode Container (Endless Sniping) -->
+<div id="sportModeContainer" class="sport-mode-container">
+    <div class="sport-inventory">
+        <div class="sport-inventory-title">INVENTORY</div>
+        <div class="sport-inventory-slot" id="sportPhoneSlot">
+            <img id="sportPhoneImg" src="https://s10.iimage.su/s/27/gW2SHD5xEsCJRzeePEv9MjGtd1C4LX32eDUT8uU8R.png" alt="Phone">
+            <div class="sport-slot-label">Mobile Phone</div>
+        </div>
+        <div class="sport-inventory-slot" id="sportRifleSlot">
+            <img id="sportRifleImg" src="https://s10.iimage.su/s/27/gDuuFXOxF9mwi01vDLyVjm778X6vCeDjVlv2zr3oz.png" alt="Rifle">
+            <div class="sport-slot-label">Sniper Rifle</div>
+        </div>
+    </div>
+    <div class="sport-canvas-container">
+        <canvas id="sportCanvas" class="sport-canvas" width="900" height="600"></canvas>
+    </div>
+    <div id="sportMagnifierLens" class="sport-magnifier">
+        <canvas id="sportMagnifierCanvas" width="200" height="200"></canvas>
+        <div class="crosshair-line-h"></div>
+        <div class="crosshair-line-v"></div>
+        <div class="crosshair-center"></div>
+    </div>
+    <div class="sport-zoom-level" id="sportZoomDisplay">10x</div>
+    <div class="sport-hit-counter" id="sportHitCounter">HITS: 0 / ∞</div>
+    <div class="sport-target-message" id="sportTargetMessage">KILL THE TARGET</div>
+    <button id="sportBackToMenuBtn" class="back-menu-btn" style="display: block;">BACK TO MENU</button>
+</div>
+
+<!-- Explosion Game Container -->
+<div id="explosionGameContainer" class="explosion-game-container">
+    <button class="fireworks-btn" id="boomButton">FIREWORKS</button>
+    <div class="explosion-counter" id="explosionCounter">Explosions: 0</div>
+    <button id="explosionBackBtn" class="explosion-back-btn">BACK TO MENU</button>
+</div>
+
+<script>
+(function() {
+    // ==================== DOM ELEMENTS ====================
+    const mainCanvas = document.getElementById('mainCanvas');
+    const magnifierCanvas = document.getElementById('magnifierCanvas');
+    const ctx = mainCanvas.getContext('2d');
+    const magCtx = magnifierCanvas.getContext('2d');
+    const lens = document.getElementById('magnifierLens');
+    const zoomDisplay = document.getElementById('zoomDisplay');
+    const phoneSlot = document.getElementById('phoneSlot');
+    const rifleSlot = document.getElementById('rifleSlot');
+    const targetMessage = document.getElementById('targetMessage');
+    const hitCounter = document.getElementById('hitCounter');
+    const gameWorld = document.getElementById('gameWorld');
+    const smsCard = document.getElementById('smsCard');
+    const yesBtn = document.getElementById('yesBtn');
+    const noBtn = document.getElementById('noBtn');
+    const timestampSpan = document.getElementById('smsTimestamp');
+    const blackScreen = document.getElementById('blackOut');
+    const bgAvatar = document.getElementById('bgAvatar');
+    const mcqueenAvatar = document.getElementById('mcqueenAvatar');
+    const postButtons = document.getElementById('postButtons');
+    const speechBubble = document.getElementById('speechBubble');
+    const birthdayBtn = document.getElementById('birthdayBtn');
+    const image1Btn = document.getElementById('image1Btn');
+    const image2Btn = document.getElementById('image2Btn');
+    const mcqueenBtn = document.getElementById('mcqueenBtn');
+    const shootForSportBtn = document.getElementById('shootForSportBtn');
+    const fireworksMenuBtn = document.getElementById('fireworksMenuBtn');
+    const museumOverlay = document.getElementById('museumOverlay');
+    const museumImg = document.getElementById('museumImg');
+    const confettiCanvas = document.getElementById('confetti-canvas');
+    const confettiCtx = confettiCanvas.getContext('2d');
+    const explosionGameContainer = document.getElementById('explosionGameContainer');
+    const explosionBackBtn = document.getElementById('explosionBackBtn');
+    const boomButton = document.getElementById('boomButton');
+    const explosionCounter = document.getElementById('explosionCounter');
+    const sportContainer = document.getElementById('sportModeContainer');
+    const sportBackBtn = document.getElementById('sportBackToMenuBtn');
+    const sportCanvas = document.getElementById('sportCanvas');
+    const sportCtx = sportCanvas.getContext('2d');
+    const sportMagnifierCanvas = document.getElementById('sportMagnifierCanvas');
+    const sportMagCtx = sportMagnifierCanvas.getContext('2d');
+    const sportLens = document.getElementById('sportMagnifierLens');
+    const sportZoomDisplay = document.getElementById('sportZoomDisplay');
+    const sportHitCounter = document.getElementById('sportHitCounter');
+    const sportTargetMessage = document.getElementById('sportTargetMessage');
+    const sportPhoneSlot = document.getElementById('sportPhoneSlot');
+    const sportRifleSlot = document.getElementById('sportRifleSlot');
+    
+    // ==================== MUSIC REFERENCE ====================
+    let finalMusic = null;
+    const musicUrl = 'https://mn1.sunproxy.net/file/NHNzaVpHZExjaTB5bitTNFR5Rm91bXZ0UmVvNExsNWZYRm1iTXp5MDlEYzlvZm9KQ3pTN3ZKakxtQnZJejFzcHV6TnJxai9xalc3SXI2TGdkSktzRlVyQitWQkVWOUsyVkJhT2h0UzFSbW89/Meat_Beat_Manifesto_-_She_s_Unreal_(mp3.mn).mp3';
+    
+    function stopMusic() {
+        if (finalMusic && !finalMusic.paused) {
+            finalMusic.pause();
+        }
+    }
+    
+    function startMusic() {
+        if (finalMusic && finalMusic.paused) {
+            finalMusic.play().catch(e => console.log("Music resume failed:", e));
+        }
+    }
+    
+    // ==================== SPORT MODE (Endless Sniping) ====================
+    let sportTargetVisible = true;
+    let sportCurrentPositionIndex = 0;
+    let sportHitCount = 0;
+    let sportIsDrawing = false;
+    let sportCurrentMouseX = 0, sportCurrentMouseY = 0;
+    
+    const CANVAS_W = 900, CANVAS_H = 600, LENS_SIZE = 200, ZOOM = 3.2;
+    sportCanvas.width = CANVAS_W; sportCanvas.height = CANVAS_H;
+    sportMagnifierCanvas.width = LENS_SIZE; sportMagnifierCanvas.height = LENS_SIZE;
+    
+    const sportBuildingImg = new Image();
+    const sportTargetImg = new Image();
+    sportBuildingImg.src = 'https://i.pinimg.com/1200x/64/0a/cf/640acf3a6ee0628a7eadf90ef26f6bad.jpg';
+    sportTargetImg.src = 'https://s10.iimage.su/s/27/gU8erGwxp2fivv6QSJs7c9QIfb0kKys1PIVAePrU2.png';
+    
+    let sportTargetWidth = 75, sportTargetHeight = 75;
+    let sportTargetNaturalWidth = 0, sportTargetNaturalHeight = 0;
+    
+    sportTargetImg.onload = () => {
+        sportTargetNaturalWidth = sportTargetImg.width;
+        sportTargetNaturalHeight = sportTargetImg.height;
+        const maxSize = 75;
+        if (sportTargetNaturalWidth > sportTargetNaturalHeight) {
+            sportTargetWidth = maxSize;
+            sportTargetHeight = (sportTargetNaturalHeight / sportTargetNaturalWidth) * maxSize;
+        } else {
+            sportTargetHeight = maxSize;
+            sportTargetWidth = (sportTargetNaturalWidth / sportTargetNaturalHeight) * maxSize;
+        }
+        if (sportTargetVisible) drawSportScene();
+    };
+    
+    const allowedBottomYPositions = [0.16, 0.30, 0.44, 0.58, 0.72, 0.87];
+    function generateSportFloorPositions() {
+        const positions = [], xPositions = [0.18, 0.28, 0.38, 0.48, 0.58, 0.68, 0.78, 0.88];
+        for (let bottomY of allowedBottomYPositions) for (let i = 0; i < 4; i++) {
+            const randomX = xPositions[Math.floor(Math.random() * xPositions.length)];
+            if (!positions.some(p => p.x === randomX && p.bottomY === bottomY)) positions.push({ x: randomX, bottomY: bottomY });
+        }
+        for (let i = positions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+        return positions;
+    }
+    let sportFloorPositions = generateSportFloorPositions();
+    
+    function drawSportScene() {
+        if (!sportBuildingImg.complete) return;
+        sportIsDrawing = true;
+        sportCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+        sportCtx.drawImage(sportBuildingImg, 0, 0, CANVAS_W, CANVAS_H);
+        if (sportTargetVisible && sportTargetImg.complete) {
+            const pos = sportFloorPositions[sportCurrentPositionIndex];
+            if (pos) {
+                const px = (pos.x * CANVAS_W) - (sportTargetWidth/2);
+                const py = (pos.bottomY * CANVAS_H) - sportTargetHeight;
+                sportCtx.drawImage(sportTargetImg, px, py, sportTargetWidth, sportTargetHeight);
+            }
+        }
+        sportCtx.save();
+        sportCtx.globalAlpha = 0.3;
+        sportCtx.drawImage(sportBuildingImg, 0, 0, CANVAS_W, CANVAS_H);
+        sportCtx.restore();
+        sportIsDrawing = false;
+    }
+    
+    function moveSportCharacterToRandomPosition() {
+        if (!sportTargetVisible) return;
+        let newIndex;
+        do {
+            newIndex = Math.floor(Math.random() * sportFloorPositions.length);
+        } while (sportFloorPositions.length > 1 && newIndex === sportCurrentPositionIndex);
+        sportCurrentPositionIndex = newIndex;
+        drawSportScene();
+        setTimeout(() => refreshSportMagnifier(), 10);
+    }
+    
+    function incrementSportHitCount() {
+        sportHitCount++;
+        sportHitCounter.innerHTML = `HITS: ${sportHitCount} / ∞`;
+    }
+    
+    function checkSportHit(mouseX, mouseY) {
+        if (!sportTargetVisible) return false;
+        const canvasRect = sportCanvas.getBoundingClientRect();
+        const canvasX = (mouseX - canvasRect.left) * (CANVAS_W / canvasRect.width);
+        const canvasY = (mouseY - canvasRect.top) * (CANVAS_H / canvasRect.height);
+        const pos = sportFloorPositions[sportCurrentPositionIndex];
+        if (!pos) return false;
+        const targetLeft = (pos.x * CANVAS_W) - (sportTargetWidth/2);
+        const targetTop = (pos.bottomY * CANVAS_H) - sportTargetHeight;
+        const isHit = (canvasX >= targetLeft && canvasX <= targetLeft + sportTargetWidth && canvasY >= targetTop && canvasY <= targetTop + sportTargetHeight);
+        if (isHit) {
+            incrementSportHitCount();
+            moveSportCharacterToRandomPosition();
+            return true;
+        }
+        return false;
+    }
+    
+    function updateSportMagnifier(mx, my) {
+        const rect = sportCanvas.getBoundingClientRect();
+        const inside = (mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom);
+        if (!inside || sportIsDrawing) {
+            sportLens.style.display = 'none';
+            return;
+        }
+        sportLens.style.display = 'block';
+        const canvasX = (mx - rect.left) * (CANVAS_W / rect.width);
+        const canvasY = (my - rect.top) * (CANVAS_H / rect.height);
+        const srcSize = LENS_SIZE / ZOOM;
+        let srcX = canvasX - srcSize/2, srcY = canvasY - srcSize/2;
+        srcX = Math.min(Math.max(srcX, 0), CANVAS_W - srcSize);
+        srcY = Math.min(Math.max(srcY, 0), CANVAS_H - srcSize);
+        sportMagCtx.clearRect(0, 0, LENS_SIZE, LENS_SIZE);
+        sportMagCtx.drawImage(sportCanvas, srcX, srcY, srcSize, srcSize, 0, 0, LENS_SIZE, LENS_SIZE);
+        let left = mx - LENS_SIZE/2, top = my - LENS_SIZE/2;
+        left = Math.max(5, Math.min(left, window.innerWidth - LENS_SIZE - 5));
+        top = Math.max(5, Math.min(top, window.innerHeight - LENS_SIZE - 5));
+        sportLens.style.left = left + 'px';
+        sportLens.style.top = top + 'px';
+        if (sportZoomDisplay) sportZoomDisplay.innerHTML = `10x | ${(canvasX/CANVAS_W*100).toFixed(0)}%, ${(canvasY/CANVAS_H*100).toFixed(0)}%`;
+    }
+    
+    function refreshSportMagnifier() {
+        if (sportLens.style.display === 'block') updateSportMagnifier(sportCurrentMouseX, sportCurrentMouseY);
+    }
+    
+    function onSportMouseMove(e) {
+        sportCurrentMouseX = e.clientX;
+        sportCurrentMouseY = e.clientY;
+        updateSportMagnifier(sportCurrentMouseX, sportCurrentMouseY);
+    }
+    
+    function onSportCanvasClick(e) {
+        const gunshotSound = new Audio('https://free-sound-effects.net/mp3/03/free-sound-1674847807.mp3');
+        gunshotSound.volume = 0.3;
+        gunshotSound.currentTime = 0;
+        gunshotSound.play().catch(err => console.log("Gunshot sound blocked:", err));
+        const rect = sportCanvas.getBoundingClientRect();
+        const x = e.clientX, y = e.clientY;
+        const insideCanvas = (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+        if (!insideCanvas) return;
+        checkSportHit(x, y);
+    }
+    
+    function startSportMode() {
+        sportHitCount = 0;
+        sportHitCounter.innerHTML = `HITS: 0 / ∞`;
+        sportTargetVisible = true;
+        sportCurrentPositionIndex = Math.floor(Math.random() * sportFloorPositions.length);
+        drawSportScene();
+        sportLens.style.display = 'block';
+        sportCanvas.style.cursor = 'crosshair';
+        sportTargetMessage.innerHTML = 'KILL THE TARGET';
+    }
+    
+    function stopSportMode() {
+        sportLens.style.display = 'none';
+        sportCanvas.style.cursor = 'default';
+    }
+    
+    sportCanvas.addEventListener('click', onSportCanvasClick);
+    window.addEventListener('mousemove', onSportMouseMove);
+    sportBuildingImg.onload = () => { drawSportScene(); };
+    
+    // Sport inventory tooltips with "Inspect" and "Equip"
+    let sportTooltip = null;
+    function showSportTooltip(text, x, y) {
+        if (sportTooltip) sportTooltip.remove();
+        sportTooltip = document.createElement('div');
+        sportTooltip.className = 'tooltip';
+        sportTooltip.textContent = text;
+        sportTooltip.style.left = x + 'px';
+        sportTooltip.style.top = (y-25) + 'px';
+        document.body.appendChild(sportTooltip);
+        setTimeout(() => { if (sportTooltip) sportTooltip.remove(); }, 1200);
+    }
+    
+    sportPhoneSlot.addEventListener('click', () => {
+        alert('Mobile Phone\nNo messages\nBattery: 67%');
+    });
+    sportRifleSlot.addEventListener('click', () => {
+        alert('Sniper Rifle\nCaliber: .308\nScope: 10x');
+    });
+    
+    sportPhoneSlot.addEventListener('mouseenter', (e) => {
+        showSportTooltip('Inspect', e.clientX, e.clientY);
+    });
+    sportRifleSlot.addEventListener('mouseenter', (e) => {
+        showSportTooltip('Equip', e.clientX, e.clientY);
+    });
+    
+    // ==================== EXPLOSION GAME VARIABLES ====================
+    const GIF_URL = "https://media.tenor.com/DqOx5At4J4cAAAAi/explosion.gif";
+    const EXPLOSION_SOUND_URL = "https://sound-pack.ru/download/Sound_19550.mp3";
+    let explosionCount = 0;
+    let audioPool = [];
+    const MAX_AUDIO_POOL = 5;
+    let currentAudioIndex = 0;
+    let audioInitialized = false;
+    
+    function initAudioPool() {
+        for (let i = 0; i < MAX_AUDIO_POOL; i++) {
+            const audio = new Audio(EXPLOSION_SOUND_URL);
+            audio.volume = 0.6;
+            audio.preload = "auto";
+            audioPool.push(audio);
+        }
+    }
+    
+    function playExplosionSound() {
+        try {
+            const audio = audioPool[currentAudioIndex];
+            currentAudioIndex = (currentAudioIndex + 1) % MAX_AUDIO_POOL;
+            audio.currentTime = 0;
+            audio.play().catch(e => {
+                const fallbackAudio = new Audio(EXPLOSION_SOUND_URL);
+                fallbackAudio.volume = 0.6;
+                fallbackAudio.play().catch(err => console.log("Sound play error:", err));
+            });
+        } catch(e) {
+            console.log("Sound error:", e);
+        }
+    }
+    
+    function ensureAudioInit() {
+        if (!audioInitialized) {
+            initAudioPool();
+            audioInitialized = true;
+        }
+    }
+    
+    function createRandomExplosion(isLarge = false, isTiny = false) {
+        const explosionDiv = document.createElement('div');
+        explosionDiv.className = 'chaos-explosion';
+        if (isLarge) explosionDiv.classList.add('large');
+        else if (isTiny) explosionDiv.classList.add('tiny');
+        const randomX = Math.random() * (window.innerWidth - 100) + 50;
+        const randomY = Math.random() * (window.innerHeight - 100) + 50;
+        explosionDiv.style.left = randomX + 'px';
+        explosionDiv.style.top = randomY + 'px';
+        explosionDiv.style.transform = `translate(-50%, -50%) rotate(${Math.random() * 360}deg)`;
+        const img = document.createElement('img');
+        img.src = GIF_URL + '?t=' + Date.now() + Math.random();
+        img.alt = 'Explosion';
+        explosionDiv.appendChild(img);
+        explosionGameContainer.appendChild(explosionDiv);
+        setTimeout(() => {
+            if (explosionDiv && explosionDiv.parentNode) explosionDiv.remove();
+        }, 1200);
+    }
+    
+    function triggerChaosExplosion() {
+        const explosionCountChaos = Math.floor(Math.random() * 20) + 8;
+        explosionCount += explosionCountChaos;
+        explosionCounter.textContent = `Explosions: ${explosionCount}`;
+        explosionGameContainer.classList.add('shake');
+        setTimeout(() => explosionGameContainer.classList.remove('shake'), 300);
+        for (let i = 0; i < explosionCountChaos; i++) {
+            const delay = Math.random() * 250;
+            setTimeout(() => {
+                const rand = Math.random();
+                if (rand < 0.2) createRandomExplosion(true, false);
+                else if (rand < 0.5) createRandomExplosion(false, true);
+                else createRandomExplosion(false, false);
+            }, delay);
+        }
+        if (Math.random() < 0.3) {
+            setTimeout(() => {
+                const secondWaveCount = Math.floor(Math.random() * 10) + 4;
+                for (let i = 0; i < secondWaveCount; i++) {
+                    setTimeout(() => {
+                        const randSize = Math.random();
+                        if (randSize < 0.3) createRandomExplosion(true, false);
+                        else createRandomExplosion(false, Math.random() < 0.4);
+                    }, Math.random() * 200);
+                }
+            }, 300);
+        }
+    }
+    
+    function triggerClickExplosion(event) {
+        ensureAudioInit();
+        playExplosionSound();
+        let clientX, clientY;
+        if (event.touches) {
+            clientX = event.touches[0].clientX;
+            clientY = event.touches[0].clientY;
+            event.preventDefault();
+        } else {
+            clientX = event.clientX;
+            clientY = event.clientY;
+        }
+        const clickExplosion = document.createElement('div');
+        clickExplosion.className = 'chaos-explosion';
+        clickExplosion.style.left = clientX + 'px';
+        clickExplosion.style.top = clientY + 'px';
+        clickExplosion.style.transform = 'translate(-50%, -50%)';
+        const img = document.createElement('img');
+        img.src = GIF_URL + '?t=' + Date.now() + Math.random();
+        clickExplosion.appendChild(img);
+        explosionGameContainer.appendChild(clickExplosion);
+        setTimeout(() => {
+            if (clickExplosion && clickExplosion.parentNode) clickExplosion.remove();
+        }, 1200);
+        triggerChaosExplosion();
+    }
+    
+    function triggerExplosion(event) {
+        triggerClickExplosion(event);
+    }
+    
+    // ==================== SPORT MODE BUTTON ====================
+    shootForSportBtn.addEventListener('click', () => {
+        stopMusic();
+        gameWorld.style.display = 'none';
+        postButtons.classList.remove('show');
+        speechBubble.classList.remove('show');
+        bgAvatar.classList.remove('show');
+        blackScreen.classList.add('no-transition');
+        blackScreen.classList.remove('active');
+        sportContainer.style.display = 'block';
+        startSportMode();
+        setTimeout(() => blackScreen.classList.remove('no-transition'), 100);
+    });
+    
+    sportBackBtn.addEventListener('click', () => {
+        stopSportMode();
+        sportContainer.style.display = 'none';
+        gameWorld.style.display = 'block';
+        postButtons.classList.add('show');
+        speechBubble.classList.add('show');
+        bgAvatar.classList.add('show');
+        blackScreen.classList.add('no-transition');
+        blackScreen.classList.add('active');
+        startMusic();
+        mainCanvas.style.cursor = 'default';
+        document.body.style.cursor = 'default';
+        setTimeout(() => blackScreen.classList.remove('no-transition'), 100);
+    });
+    
+    // ==================== FIREWORKS BUTTON ====================
+    fireworksMenuBtn.addEventListener('click', () => {
+        stopMusic();
+        gameWorld.style.display = 'none';
+        postButtons.classList.remove('show');
+        speechBubble.classList.remove('show');
+        bgAvatar.classList.remove('show');
+        blackScreen.classList.add('no-transition');
+        blackScreen.classList.remove('active');
+        explosionCount = 0;
+        explosionCounter.textContent = `Explosions: 0`;
+        explosionGameContainer.style.display = 'flex';
+        setTimeout(() => blackScreen.classList.remove('no-transition'), 100);
+    });
+    
+    explosionBackBtn.addEventListener('click', () => {
+        explosionGameContainer.style.display = 'none';
+        gameWorld.style.display = 'block';
+        postButtons.classList.add('show');
+        speechBubble.classList.add('show');
+        bgAvatar.classList.add('show');
+        blackScreen.classList.add('no-transition');
+        blackScreen.classList.add('active');
+        startMusic();
+        mainCanvas.style.cursor = 'default';
+        document.body.style.cursor = 'default';
+        const explosions = explosionGameContainer.querySelectorAll('.chaos-explosion');
+        explosions.forEach(exp => exp.remove());
+        setTimeout(() => blackScreen.classList.remove('no-transition'), 100);
+    });
+    
+    if (boomButton) {
+        boomButton.addEventListener('click', triggerExplosion);
+        boomButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            triggerExplosion(e);
+        }, { passive: false });
+    }
+    
+    document.addEventListener('keydown', (e) => {
+        if (explosionGameContainer.style.display === 'flex' && e.code === 'Space' && !e.repeat) {
+            e.preventDefault();
+            ensureAudioInit();
+            playExplosionSound();
+            const fakeEvent = { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 };
+            triggerClickExplosion(fakeEvent);
+        }
+    });
+    
+    // ==================== VISUAL NOVEL ELEMENTS ====================
+    const vnOverlay = document.getElementById('vnOverlay');
+    const vnText = document.getElementById('vnText');
+    const vnImage1 = document.getElementById('vnImage1');
+    const vnImage2 = document.getElementById('vnImage2');
+    const vnImageContainer = document.getElementById('vnImageContainer');
+    const vnBackBtn = document.getElementById('vnBackBtn');
+    const vnNextBtn = document.getElementById('vnNextBtn');
+    const vnAvatarDiv = document.getElementById('vnAvatar');
+    
+    let currentAvatarIsMcqueen = false;
+    const fallbackAvatarSVG = `<svg class="avatar-img" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="100" cy="100" r="95" fill="#2a2a2e" stroke="#555" stroke-width="2"/>
+        <circle cx="100" cy="80" r="35" fill="#3a3a3e" stroke="#666" stroke-width="1.5"/>
+        <circle cx="85" cy="75" r="4" fill="#888"/>
+        <circle cx="115" cy="75" r="4" fill="#888"/>
+        <ellipse cx="100" cy="130" rx="45" ry="60" fill="#3a3a3e" stroke="#666" stroke-width="1.5"/>
+        <path d="M75 110 L125 110" stroke="#888" stroke-width="2" stroke-linecap="round"/>
+    </svg>`;
+    
+    function updateVnAvatar() {
+        if (currentAvatarIsMcqueen) {
+            if (mcqueenAvatar.complete && mcqueenAvatar.naturalWidth > 1) {
+                vnAvatarDiv.innerHTML = `<img class="avatar-img" src="${mcqueenAvatar.src}" alt="McQueen" onerror="this.onerror=null; this.parentElement.innerHTML = \`<div class='avatar-img' style='background:#2a2a2e; border-radius:50%; width:150px; height:150px; display:flex; align-items:center; justify-content:center; color:#888;'>MCQUEEN</div>\`;">`;
+            } else {
+                vnAvatarDiv.innerHTML = `<div class="avatar-img" style="background:#2a2a2e; border-radius:50%; width:150px; height:150px; display:flex; align-items:center; justify-content:center; color:#888;">MCQUEEN</div>`;
+            }
+        } else {
+            if (bgAvatar.complete && bgAvatar.naturalWidth > 1) {
+                vnAvatarDiv.innerHTML = `<img class="avatar-img" src="${bgAvatar.src}" alt="Avatar" onerror="this.onerror=null; this.parentElement.innerHTML = \`${fallbackAvatarSVG}\`;">`;
+            } else {
+                vnAvatarDiv.innerHTML = fallbackAvatarSVG;
+            }
+        }
+    }
+    
+    function toggleMcQueenMode() {
+        currentAvatarIsMcqueen = !currentAvatarIsMcqueen;
+        if (currentAvatarIsMcqueen) {
+            bgAvatar.src = mcqueenAvatar.src;
+        } else {
+            bgAvatar.src = 'https://s10.iimage.su/s/31/gxMh4BFxfdZFvaTk4gIZNQ98NRm9st01a4DhyU8wL.png';
+        }
+        bgAvatar.classList.add('show');
+        updateVnAvatar();
+    }
+    
+    bgAvatar.onerror = () => { updateVnAvatar(); };
+    mcqueenAvatar.onerror = () => { if (currentAvatarIsMcqueen) updateVnAvatar(); };
+    
+    // ==================== VISUAL NOVEL SEQUENCE ====================
+    const steps = [
+        { type: "text", content: "Y'know, I've always been curious about the intimacy you exchange with people at your gunpoint." },
+        { type: "text", content: "I can almost feel your crosshairs stroking my neck. Sends shivers down my spine, honestly..." },
+        { type: "text", content: "Why, one curiosity fulfilled. Now I really want to make up for the fact that I missed two of your Birthdays." },
+        { type: "text", content: "I made two silly drawings. Not 100% happy with them but... I don't have enough time to work on my skill, really." },
+        { type: "text", content: "Anyway, have a look." },
+        { type: "image", imageId: "vnImage1" },
+        { type: "image", imageId: "vnImage2" }
+    ];
+    
+    let currentStep = -1;
+    let sequenceActive = false;
+    
+    function hideAllImages() {
+        vnImage1.classList.remove('show');
+        vnImage2.classList.remove('show');
+        vnImageContainer.style.display = 'none';
+    }
+    
+    function showImage(imageId) {
+        hideAllImages();
+        vnImageContainer.style.display = 'flex';
+        const imgElement = document.getElementById(imageId);
+        if (imgElement) imgElement.classList.add('show');
+    }
+    
+    function showText(text) {
+        hideAllImages();
+        vnText.textContent = text;
+        vnText.style.display = 'block';
+    }
+    
+    function clearText() {
+        vnText.textContent = '';
+        vnText.style.display = 'none';
+    }
+    
+    function updateDisplay() {
+        if (currentStep >= 0 && currentStep < steps.length) {
+            const step = steps[currentStep];
+            if (step.type === 'text') showText(step.content);
+            else if (step.type === 'image') { clearText(); showImage(step.imageId); }
+        } else if (currentStep >= steps.length) {
+            closeVisualNovel();
+        }
+    }
+    
+    function nextStep() {
+        if (currentStep < steps.length) { currentStep++; updateDisplay(); }
+        else closeVisualNovel();
+    }
+    
+    function prevStep() { if (currentStep > 0) { currentStep--; updateDisplay(); } }
+    
+    function closeVisualNovel() {
+        vnOverlay.style.display = 'none';
+        sequenceActive = false;
+        window.removeEventListener('keydown', keyboardHandler);
+        postButtons.classList.add('show');
+        speechBubble.classList.add('show');
+    }
+    
+    function keyboardHandler(e) {
+        if (!sequenceActive) return;
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Space' || e.key === 'Enter') { e.preventDefault(); nextStep(); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); prevStep(); }
+    }
+    
+    function startVisualNovel() {
+        sequenceActive = true;
+        currentStep = -1;
+        vnOverlay.style.display = 'flex';
+        clearText();
+        hideAllImages();
+        window.addEventListener('keydown', keyboardHandler);
+    }
+    
+    vnOverlay.addEventListener('click', (e) => {
+        if (e.target === vnBackBtn || e.target === vnNextBtn) return;
+        if (sequenceActive) nextStep();
+    });
+    vnNextBtn.addEventListener('click', (e) => { e.stopPropagation(); nextStep(); });
+    vnBackBtn.addEventListener('click', (e) => { e.stopPropagation(); prevStep(); });
+    
+    // ==================== CONFETTI SYSTEM ====================
+    let confettiActive = false;
+    let confettiParticles = [];
+    let animationId = null;
+    
+    function resizeConfettiCanvas() {
+        confettiCanvas.width = window.innerWidth;
+        confettiCanvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeConfettiCanvas);
+    resizeConfettiCanvas();
+    
+    function createConfetti() {
+        const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ff6600', '#ffcc00'];
+        return {
+            x: Math.random() * confettiCanvas.width,
+            y: Math.random() * confettiCanvas.height - confettiCanvas.height,
+            size: Math.random() * 8 + 4,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            speedX: (Math.random() - 0.5) * 3,
+            speedY: Math.random() * 5 + 3,
+            rotation: Math.random() * 360,
+            rotationSpeed: (Math.random() - 0.5) * 10
+        };
+    }
+    
+    function drawConfetti() {
+        if (!confettiActive) return;
+        confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+        for (let i = 0; i < confettiParticles.length; i++) {
+            const p = confettiParticles[i];
+            confettiCtx.save();
+            confettiCtx.translate(p.x, p.y);
+            confettiCtx.rotate(p.rotation * Math.PI / 180);
+            confettiCtx.fillStyle = p.color;
+            confettiCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+            confettiCtx.restore();
+            p.x += p.speedX;
+            p.y += p.speedY;
+            p.rotation += p.rotationSpeed;
+            if (p.y > confettiCanvas.height + 50 || p.x < -50 || p.x > confettiCanvas.width + 50) {
+                confettiParticles[i] = createConfetti();
+            }
+        }
+        animationId = requestAnimationFrame(drawConfetti);
+    }
+    
+    function startConfetti() {
+        if (confettiActive) return;
+        confettiActive = true;
+        confettiParticles = [];
+        for (let i = 0; i < 150; i++) confettiParticles.push(createConfetti());
+        drawConfetti();
+        setTimeout(() => {
+            confettiActive = false;
+            if (animationId) cancelAnimationFrame(animationId);
+            confettiCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+        }, 4000);
+    }
+    
+    // ==================== MUSEUM OVERLAY ====================
+    function showMuseumImage(src) {
+        museumImg.src = src;
+        museumOverlay.style.display = 'flex';
+    }
+    museumOverlay.addEventListener('click', () => { museumOverlay.style.display = 'none'; });
+    
+    // ==================== POST-SEQUENCE BUTTONS ====================
+    birthdayBtn.addEventListener('click', startConfetti);
+    image1Btn.addEventListener('click', () => showMuseumImage('https://i.pinimg.com/736x/23/99/12/2399127a84ad940fd817df0e5ea5514f.jpg'));
+    image2Btn.addEventListener('click', () => showMuseumImage('https://i.pinimg.com/736x/4c/bb/00/4cbb003a78ae7b640fa44ee22dee987b.jpg'));
+    mcqueenBtn.addEventListener('click', toggleMcQueenMode);
+    
+    // ==================== FINAL SEQUENCE ====================
+    function startFinalSequence() {
+        try { 
+            finalMusic = new Audio(musicUrl); 
+            finalMusic.volume = 0.7; 
+            finalMusic.loop = true; 
+            finalMusic.play().catch(e => console.log("Music play failed:", e)); 
+        } 
+        catch(e) { console.log("Music error:", e); }
+        setTimeout(() => { bgAvatar.classList.add('show'); }, 7000);
+        setTimeout(() => { startVisualNovel(); }, 8000);
+    }
+    
+    // ==================== ORIGINAL GAME SETUP ====================
+    noBtn.addEventListener('mouseenter', function() { this.textContent = 'Yes'; });
+    noBtn.addEventListener('mouseleave', function() { this.textContent = 'No'; });
+    
+    mainCanvas.width = 900; mainCanvas.height = 600;
+    magnifierCanvas.width = 200; magnifierCanvas.height = 200;
+    
+    const buildingImg = new Image();
+    const targetImg = new Image();
+    buildingImg.src = 'https://i.pinimg.com/1200x/64/0a/cf/640acf3a6ee0628a7eadf90ef26f6bad.jpg';
+    targetImg.src = 'https://s10.iimage.su/s/27/gU8erGwxp2fivv6QSJs7c9QIfb0kKys1PIVAePrU2.png';
+    
+    let targetWidth = 75, targetHeight = 75;
+    let targetVisible = false, currentPositionIndex = 0, hitCount = 0, phase = "SNIPING";
+    let isDrawing = false, currentMouseX = 0, currentMouseY = 0;
+    let floorPositions = [];
+    
+    function generateFloorPositions() {
+        const positions = [], xPositions = [0.18, 0.28, 0.38, 0.48, 0.58, 0.68, 0.78, 0.88];
+        for (let bottomY of allowedBottomYPositions) for (let i = 0; i < 4; i++) {
+            const randomX = xPositions[Math.floor(Math.random() * xPositions.length)];
+            if (!positions.some(p => p.x === randomX && p.bottomY === bottomY)) positions.push({ x: randomX, bottomY: bottomY });
+        }
+        for (let i = positions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+        return positions;
+    }
+    floorPositions = generateFloorPositions();
+    
+    targetImg.onload = () => {
+        const maxSize = 75;
+        if (targetImg.width > targetImg.height) {
+            targetWidth = maxSize;
+            targetHeight = (targetImg.height / targetImg.width) * maxSize;
+        } else {
+            targetHeight = maxSize;
+            targetWidth = (targetImg.width / targetImg.height) * maxSize;
+        }
+        if (targetVisible) drawScene();
+    };
+    
+    function drawScene() {
+        if (!buildingImg.complete) return;
+        isDrawing = true;
+        ctx.clearRect(0, 0, 900, 600);
+        ctx.drawImage(buildingImg, 0, 0, 900, 600);
+        if (targetVisible && targetImg.complete) {
+            const pos = floorPositions[currentPositionIndex];
+            if (pos) {
+                const px = (pos.x * 900) - (targetWidth/2);
+                const py = (pos.bottomY * 600) - targetHeight;
+                ctx.drawImage(targetImg, px, py, targetWidth, targetHeight);
+            }
+        }
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.drawImage(buildingImg, 0, 0, 900, 600);
+        ctx.restore();
+        isDrawing = false;
+    }
+    
+    function moveCharacterToRandomPosition() {
+        if (!targetVisible) return;
+        let newIndex;
+        do {
+            newIndex = Math.floor(Math.random() * floorPositions.length);
+        } while (floorPositions.length > 1 && newIndex === currentPositionIndex);
+        currentPositionIndex = newIndex;
+        drawScene();
+        setTimeout(() => refreshMagnifier(), 10);
+    }
+    
+    function incrementHitCount() {
+        hitCount++;
+        hitCounter.innerHTML = `HITS: ${hitCount} / 10`;
+        if (hitCount >= 10 && phase === "SNIPING") {
+            triggerNewMessageSequence();
+        }
+    }
+    
+    function checkHit(mouseX, mouseY) {
+        if (!targetVisible || phase !== "SNIPING") return false;
+        const canvasRect = mainCanvas.getBoundingClientRect();
+        const canvasX = (mouseX - canvasRect.left) * (900 / canvasRect.width);
+        const canvasY = (mouseY - canvasRect.top) * (600 / canvasRect.height);
+        const pos = floorPositions[currentPositionIndex];
+        if (!pos) return false;
+        const targetLeft = (pos.x * 900) - (targetWidth/2);
+        const targetTop = (pos.bottomY * 600) - targetHeight;
+        const isHit = (canvasX >= targetLeft && canvasX <= targetLeft + targetWidth && canvasY >= targetTop && canvasY <= targetTop + targetHeight);
+        if (isHit) {
+            incrementHitCount();
+            moveCharacterToRandomPosition();
+            return true;
+        }
+        return false;
+    }
+    
+    function updateMagnifier(mx, my) {
+        if (phase !== "SNIPING") {
+            lens.style.display = 'none';
+            return;
+        }
+        const rect = mainCanvas.getBoundingClientRect();
+        const inside = (mx >= rect.left && mx <= rect.right && my >= rect.top && my <= rect.bottom);
+        if (!inside || isDrawing) {
+            lens.style.display = 'none';
+            return;
+        }
+        lens.style.display = 'block';
+        const canvasX = (mx - rect.left) * (900 / rect.width);
+        const canvasY = (my - rect.top) * (600 / rect.height);
+        const srcSize = 200 / 3.2;
+        let srcX = canvasX - srcSize/2, srcY = canvasY - srcSize/2;
+        srcX = Math.min(Math.max(srcX, 0), 900 - srcSize);
+        srcY = Math.min(Math.max(srcY, 0), 600 - srcSize);
+        magCtx.clearRect(0, 0, 200, 200);
+        magCtx.drawImage(mainCanvas, srcX, srcY, srcSize, srcSize, 0, 0, 200, 200);
+        let left = mx - 100, top = my - 100;
+        left = Math.max(5, Math.min(left, window.innerWidth - 205));
+        top = Math.max(5, Math.min(top, window.innerHeight - 205));
+        lens.style.left = left + 'px';
+        lens.style.top = top + 'px';
+        if (zoomDisplay) zoomDisplay.innerHTML = `10x | ${(canvasX/900*100).toFixed(0)}%, ${(canvasY/600*100).toFixed(0)}%`;
+    }
+    
+    function refreshMagnifier() { if (lens.style.display === 'block') updateMagnifier(currentMouseX, currentMouseY); }
+    function onMouseMove(e) { currentMouseX = e.clientX; currentMouseY = e.clientY; updateMagnifier(currentMouseX, currentMouseY); }
+    function onCanvasClick(e) {
+        if (phase !== "SNIPING") return;
+        const gunshotSound = new Audio('https://free-sound-effects.net/mp3/03/free-sound-1674847807.mp3');
+        gunshotSound.volume = 0.3;
+        gunshotSound.currentTime = 0;
+        gunshotSound.play().catch(err => console.log("Gunshot sound blocked:", err));
+        const rect = mainCanvas.getBoundingClientRect();
+        const x = e.clientX, y = e.clientY;
+        const insideCanvas = (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+        if (!insideCanvas) return;
+        if (!targetVisible) {
+            targetVisible = true;
+            currentPositionIndex = Math.floor(Math.random() * floorPositions.length);
+            drawScene();
+        } else {
+            checkHit(x, y);
+        }
+    }
+    
+    const notificationSound = new Audio('https://zvukitop.com/wp-content/uploads/2021/01/zvuk-opovesheniya-ili-uvedomlenia-iphone.mp3');
+    let vibrationAudio = null, vibrationInterval = null;
+    
+    function startVibration() {
+        if (vibrationInterval) clearInterval(vibrationInterval);
+        if (!vibrationAudio) {
+            vibrationAudio = new Audio('https://zvukogram.com/mp3/45/phone-vibrates-like-a-mosquito-repetitive.mp3');
+            vibrationAudio.loop = true;
+        }
+        vibrationAudio.currentTime = 0;
+        vibrationAudio.play().catch(e => console.log('Vibration failed:', e));
+        vibrationInterval = setInterval(() => {
+            if (vibrationAudio && (vibrationAudio.ended || vibrationAudio.currentTime >= vibrationAudio.duration - 0.1)) {
+                vibrationAudio.currentTime = 0;
+                vibrationAudio.play().catch(e => {});
+            }
+        }, 2000);
+    }
+    
+    function stopVibration() {
+        if (vibrationInterval) { clearInterval(vibrationInterval); vibrationInterval = null; }
+        if (vibrationAudio) { vibrationAudio.pause(); vibrationAudio.currentTime = 0; }
+    }
+    
+    function startTextGrowth(text, isFinalPhase = false) {
+        targetMessage.innerHTML = text;
+        targetMessage.style.bottom = '20px';
+        targetMessage.style.left = '20px';
+        targetMessage.style.transform = 'translate(0, 0)';
+        targetMessage.style.fontSize = '13px';
+        targetMessage.style.padding = '6px 12px';
+        targetMessage.offsetHeight;
+        targetMessage.classList.add('growing');
+        requestAnimationFrame(() => {
+            targetMessage.style.transition = 'all 2s ease-out';
+            targetMessage.style.bottom = '50%';
+            targetMessage.style.left = '50%';
+            targetMessage.style.transform = 'translate(-50%, -50%)';
+            targetMessage.style.fontSize = isFinalPhase ? '80px' : '48px';
+            targetMessage.style.padding = isFinalPhase ? '30px 60px' : '20px 40px';
+            targetMessage.style.backgroundColor = 'rgba(0,0,0,0.9)';
+        });
+    }
+    
+    function resetTextToCorner() {
+        targetMessage.style.transition = 'all 0.4s ease-out';
+        targetMessage.style.bottom = '20px';
+        targetMessage.style.left = '20px';
+        targetMessage.style.transform = 'translate(0, 0)';
+        targetMessage.style.fontSize = '13px';
+        targetMessage.style.padding = '6px 12px';
+        targetMessage.style.backgroundColor = '#1a1a1a';
+        targetMessage.classList.remove('growing');
+        targetMessage.innerHTML = 'KILL THE TARGET';
+        setTimeout(() => { targetMessage.style.transition = ''; }, 500);
+    }
+    
+    function updateTimestamp() {
+        const now = new Date();
+        timestampSpan.innerText = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    }
+    setInterval(updateTimestamp, 60000);
+    updateTimestamp();
+    
+    function showSmsMessage() {
+        updateTimestamp();
+        smsCard.style.display = 'block';
+        smsCard.style.cursor = 'grab';
+        document.body.classList.add('sms-mode');
+        lens.style.display = 'none';
+        mainCanvas.style.cursor = 'default';
+        document.body.style.cursor = 'default';
+        phoneSlot.classList.remove('pulse');
+        resetTextToCorner();
+        function onYesClick() {
+            if (phase !== "WAITING_FOR_PHONE_CLICK") return;
+            smsCard.style.display = 'none';
+            document.body.classList.remove('sms-mode');
+            startPhoneRingingPhase();
+        }
+        yesBtn.onclick = onYesClick;
+        noBtn.onclick = onYesClick;
+    }
+    
+    function startPhoneRingingPhase() {
+        phase = "PHONE_RINGING";
+        startVibration();
+        phoneSlot.classList.add('pulse');
+        startTextGrowth('ANSWER THE PHONE', true);
+    }
+    
+    function answerPhoneAndFade() {
+        if (phase !== "PHONE_RINGING") return;
+        phase = "BLACKOUT";
+        stopVibration();
+        phoneSlot.classList.remove('pulse');
+        resetTextToCorner();
+        gameWorld.classList.add('blackout');
+        blackScreen.classList.add('active');
+        lens.style.display = 'none';
+        smsCard.style.display = 'none';
+        document.body.classList.remove('sms-mode');
+        startFinalSequence();
+    }
+    
+    function triggerNewMessageSequence() {
+        if (phase !== "SNIPING") return;
+        phase = "WAITING_FOR_PHONE_CLICK";
+        startTextGrowth('CHECK THE NEW MESSAGE', false);
+        phoneSlot.classList.add('pulse');
+        notificationSound.currentTime = 0;
+        notificationSound.play().catch(e => console.log("Notification sound blocked"));
+    }
+    
+    function makeDraggable() {
+        let isDragging = false, dragOffsetX = 0, dragOffsetY = 0;
+        smsCard.addEventListener('mousedown', (e) => {
+            if (e.target === yesBtn || e.target === noBtn) return;
+            isDragging = true;
+            const rect = smsCard.getBoundingClientRect();
+            dragOffsetX = e.clientX - rect.left;
+            dragOffsetY = e.clientY - rect.top;
+            smsCard.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            let newLeft = e.clientX - dragOffsetX;
+            let newTop = e.clientY - dragOffsetY;
+            const maxX = window.innerWidth - smsCard.offsetWidth;
+            const maxY = window.innerHeight - smsCard.offsetHeight;
+            newLeft = Math.min(Math.max(0, newLeft), maxX);
+            newTop = Math.min(Math.max(0, newTop), maxY);
+            smsCard.style.left = newLeft + 'px';
+            smsCard.style.top = newTop + 'px';
+            smsCard.style.transform = 'none';
+        });
+        window.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                smsCard.style.cursor = 'grab';
+            }
+        });
+    }
+    
+    function setupEventListeners() {
+        window.addEventListener('mousemove', onMouseMove);
+        mainCanvas.addEventListener('click', onCanvasClick);
+        phoneSlot.addEventListener('click', () => {
+            if (phase === "PHONE_RINGING") answerPhoneAndFade();
+            else if (phase === "WAITING_FOR_PHONE_CLICK") showSmsMessage();
+            else alert('Mobile Phone\nNo messages\nBattery: 67%');
+        });
+        rifleSlot.addEventListener('click', () => alert('Sniper Rifle\nCaliber: .308\nScope: 10x'));
+        let tooltip = null;
+        function showTooltip(text, x, y) {
+            if (tooltip) tooltip.remove();
+            tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.textContent = text;
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = (y-25) + 'px';
+            document.body.appendChild(tooltip);
+            setTimeout(() => { if (tooltip) tooltip.remove(); }, 1200);
+        }
+        phoneSlot.addEventListener('mouseenter', (e) => {
+            if (phase === "PHONE_RINGING") showTooltip('ANSWER THE CALL', e.clientX, e.clientY);
+            else if (phase === "WAITING_FOR_PHONE_CLICK") showTooltip('NEW MESSAGE', e.clientX, e.clientY);
+            else showTooltip('Inspect', e.clientX, e.clientY);
+        });
+        rifleSlot.addEventListener('mouseenter', (e) => showTooltip('Equip', e.clientX, e.clientY));
+        makeDraggable();
+    }
+    
+    buildingImg.onload = () => { drawScene(); setupEventListeners(); };
+    setTimeout(() => {
+        if (!buildingImg.complete) {
+            buildingImg.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="900" height="600"%3E%3Crect width="900" height="600" fill="%23333"/%3E%3Ctext x="450" y="300" fill="white" font-size="30" text-anchor="middle"%3EBUILDING%3C/text%3E%3C/svg%3E';
+        }
+    }, 3000);
+    
+    updateVnAvatar();
+})();
+</script>
+</body>
+</html>
